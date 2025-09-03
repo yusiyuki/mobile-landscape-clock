@@ -1,161 +1,321 @@
 <!doctype html>
-<html lang="zh-Hant-TW">
+<html lang="zh-Hant">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no, viewport-fit=cover" />
-  <title>手機橫向時鐘</title>
-  <meta name="theme-color" content="#0a0a0a" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#000000" />
+  <!-- iOS 安裝到主畫面支援 -->
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="OLED Clock" />
+  <title>OLED Safe Clock</title>
   <style>
-    :root{
-      --bg: #0b0c10;
-      --fg: #e6e6e6;
-      --muted: #9aa0a6;
-      --accent: #7cc5ff;
-      --gap: min(2.2vmin, 14px);
-      --radius: 20px;
-      --shadow: 0 8px 30px rgba(0,0,0,.35);
+    :root {
+      --bg: #000; /* 全黑省電 */
+      --fg: #e6e6e6; /* 柔和白 */
+      --accent: #7dd3fc; /* 淡藍點綴 */
+      --nudge-x: 0px;/* 防烙印位移 - 只左右 */
+      --safe-padding: env(safe-area-inset-left, 0px);
     }
-    *{box-sizing:border-box}
-    html,body{height:100%;background:var(--bg);color:var(--fg);margin:0;font-family: ui-rounded, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Noto Sans", "Apple Color Emoji","Segoe UI Emoji";}
-    .page{height:100%;display:flex;flex-direction:column;justify-content:center;align-items:center;gap:var(--gap);padding:calc(env(safe-area-inset-top, 0px) + var(--gap)) calc(env(safe-area-inset-right, 0px) + var(--gap)) calc(env(safe-area-inset-bottom, 0px) + var(--gap)) calc(env(safe-area-inset-left, 0px) + var(--gap));}
-    .backdrop{position:fixed;inset:0;z-index:-1;background:linear-gradient(160deg, #0a0a0a, #12161f)}
+    * { box-sizing: border-box; }
+    html, body { height: 100%; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--fg);
+      font-family: ui-rounded, system-ui, -apple-system, Segoe UI, Roboto, Noto Sans, sans-serif;
+      touch-action: manipulation;
+      -webkit-tap-highlight-color: transparent;
+      overflow: hidden; /* 防止位移時出現捲動 */
+    }
 
-    .clock-card{width: min(95vw, 100vh);padding: clamp(10px, 3vmin, 28px);border-radius: var(--radius);background: rgba(255,255,255,0.04);backdrop-filter: blur(10px);box-shadow: var(--shadow);display:flex;flex-direction:column;align-items:center;gap:calc(var(--gap)*0.8);border: 1px solid rgba(255,255,255,0.08);position:relative;}
+    /* 主要舞台 */
+    #stage {
+      position: fixed; inset: 0; display: grid; place-items: center;
+      padding: 12px; padding-left: calc(12px + var(--safe-padding));
+    }
 
-    .time{display:flex;align-items:baseline;gap: clamp(8px, 2.2vmin, 22px);font-variant-numeric: tabular-nums;letter-spacing: 0.02em;}
-    .hhmm{font-size: clamp(48px, 22vmin, 180px);line-height: 1; font-weight: 700;transition: transform 0.5s;}
-    .colon{display:inline-block; animation: blink 1s steps(2,end) infinite; opacity: 0.8;transition: transform 0.5s;}
-    @keyframes blink{50%{opacity:0.2}}
-    .sec{font-size: clamp(20px, 8vmin, 64px);opacity:.9;transition: transform 0.5s;}
+    /* HUD（右上角） */
+    .hud { position: fixed; top: 8px; right: 8px; display: flex; gap: 8px; align-items: center; z-index: 20; }
+    .hud button {
+      font-size: 18px; line-height: 1; padding: 10px 12px; border-radius: 14px; border: 1px solid #333; background: #111; color: var(--fg);
+      box-shadow: 0 4px 16px rgba(0,0,0,.35); cursor: pointer; opacity: .9; backdrop-filter: blur(4px);
+    }
+    .hud button:active { transform: scale(.98); }
+    #visitors { padding: 8px 12px; border-radius: 12px; background: #0b0b0b; border: 1px solid #232323; font-size: 14px; }
 
-    .date-row{display:flex;gap:10px;align-items:center;flex-wrap:wrap;justify-content:center;color:var(--muted);font-size: clamp(14px, 5vmin, 22px);transition: transform 0.5s;}
+    /* 時鐘塊 */
+    .clock { text-align: center; transform: translateX(var(--nudge-x)); will-change: transform; }
+    .time {
+      font-weight: 700; letter-spacing: 0.04em; line-height: .95;
+      font-size: clamp(54px, 16vw, 160px);
+      text-shadow: 0 0 8px rgba(125,211,252,.15);
+    }
+    .date { opacity: .9; font-size: clamp(16px, 3.6vw, 28px); margin-top: 6px; color: #c9c9c9; }
 
-    .toolbar{display:flex;gap:var(--gap);flex-wrap:wrap;justify-content:center}
-    .btn{border:1px solid rgba(255,255,255,.15);background:rgba(255,255,255,.06);color:var(--fg);padding:10px 14px;border-radius:12px;cursor:pointer;font-size: clamp(12px, 3.8vmin, 16px);font-weight:600;backdrop-filter: blur(6px);transition: transform 0.5s;} 
-    .btn:hover{background:rgba(255,255,255,.12)}
-    .btn[aria-pressed="true"]{outline:2px solid var(--accent);}
+    /* 提示 */
+    .hint {
+      position: fixed; left: 12px; bottom: 12px; z-index: 10;
+      font-size: 14px; opacity: .85; color: #cfcfcf; background: #101010; border: 1px solid #272727; padding: 8px 12px; border-radius: 12px;
+    }
 
-    .status{display:flex;gap:12px;align-items:center;color:var(--muted);font-size: clamp(12px, 3.8vmin, 16px);transition: transform 0.5s;}
-    .dot{width:10px;height:10px;border-radius:50%;display:inline-block;vertical-align:middle;margin-right:6px;background:var(--warn)}
+    /* 設定面板 */
+    #panel {
+      position: fixed; right: 10px; top: 54px; width: min(86vw, 360px); z-index: 30;
+      background: #0d0d0d; border: 1px solid #2a2a2a; border-radius: 16px; padding: 14px 14px 10px;
+      box-shadow: 0 12px 34px rgba(0,0,0,.55);
+    }
+    #panel h3 { margin: 0 0 8px; font-size: 16px; }
+    #panel .row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 4px; }
+    #panel input[type="number"] { width: 90px; }
+    #panel hr { border: none; border-top: 1px solid #232323; margin: 8px 0; }
+    #panel label { font-size: 14px; color: #ddd; }
 
-    .battery{display:flex;align-items:center;gap:8px}
-    .battery-bar{width:64px;height:12px;border-radius:6px;border:1px solid rgba(255,255,255,.25);position:relative;overflow:hidden}
-    .battery-fill{position:absolute;inset:1px;inset-inline-start:1px;width:0%;height:calc(100% - 2px);border-radius:5px;background:linear-gradient(90deg, #8bc34a, #4caf50)}
+    /* 小動物（emoji 走位） */
+    #animals { position: fixed; inset: 0; pointer-events: none; overflow: hidden; z-index: 0; }
+    .ani { position: absolute; font-size: clamp(24px, 6vw, 42px); filter: drop-shadow(0 2px 6px rgba(0,0,0,.5)); opacity: .95; }
+    @keyframes swim {
+      from { transform: translateX(120vw) }
+      to { transform: translateX(-140vw) }
+    }
 
-    .animal{position:absolute;bottom:10px;left:10px;font-size:24px;animation: hop 4s infinite;}
-    @keyframes hop{0%,100%{transform:translateY(0)}50%{transform:translateY(-8px)}}
+    /* 自動隱藏 HUD */
+    .hud.hidden { opacity: 0; pointer-events: none; transition: opacity .4s ease; }
 
-    .viewer-count{margin-top:10px;color:var(--muted);font-size:14px;}
+    @media (display-mode: standalone) {
+      body { padding-left: var(--safe-padding); }
+    }
 
-    .rotate-hint{position:fixed;inset:0;display:none;place-items:center;text-align:center;padding:24px;background:rgba(0,0,0,.85);color:#fff;z-index:10}
-    .rotate-hint .box{max-width:560px}
-    .rotate-hint h2{margin:.2em 0 0.4em;font-size:22px}
-    .rotate-hint p{margin:0;color:#d0d0d0}
-    @media (orientation: portrait){ .rotate-hint{display:grid} }
-    .critters{position:absolute;inset:auto 0 10px 0;display:flex;justify-content:center;gap:18px;pointer-events:none}
-  .critters .critter{font-size: clamp(18px, 6vmin, 36px);filter: drop-shadow(0 2px 6px rgba(0,0,0,.5));animation: float 3s ease-in-out infinite;transition: transform .5s;}
-  .critters .critter:nth-child(2){animation-delay:.4s}
-  .critters .critter:nth-child(3){animation-delay:.8s}
-  @keyframes float{0%,100%{transform: translateY(0)}50%{transform: translateY(-6px)}}
+    @media (prefers-reduced-motion: reduce) {
+      .time { text-shadow: none; }
+      .ani { display: none !important; }
+    }
   </style>
 </head>
 <body>
-  <div class="backdrop" id="backdrop"></div>
-  <div class="rotate-hint"><div class="box"><h2>請橫置手機</h2><p>本頁最佳顯示於橫向模式（Landscape）。</p></div></div>
-  <main class="page" id="app">
-    <section class="clock-card">
-      <div class="time"><span class="hhmm" id="hh">00</span><span class="hhmm colon">:</span><span class="hhmm" id="mm">00</span><span class="sec" id="sec">00</span></div>
-      <div class="date-row" id="dateRow">—</div>
-      <div class="toolbar"><button class="btn" id="toggle-12h" aria-pressed="false">24小時制</button><button class="btn" id="toggle-sec" aria-pressed="true">顯示秒</button></div>
-      <div class=\"status\" id=\"statusRow\">
-        <span id=\"tz\">—<\/span>
-        <span id=\"viewBox\" style=\"margin-left:12px\"><span>瀏覽人數：</span><strong id=\"viewCount\">—<\/strong><\/span>
-      <\/div>
-      <div class=\"critters\" aria-label=\"小動物\">
-        <span class=\"critter\" role=\"img\" aria-label=\"小貓\">🐱<\/span>
-        <span class=\"critter\" role=\"img\" aria-label=\"小兔\">🐰<\/span>
-        <span class=\"critter\" role=\"img\" aria-label=\"小雞\">🐤<\/span>
-      <\/div>
-      <div class="animal" id="animal">🐱</div>
-      <div class="viewer-count" id="viewerCount">👀 瀏覽人數：0</div>
-    </section>
+  <header class="hud" id="hud">
+    <button id="fsBtn" title="切換全螢幕">⤢ 全螢幕</button>
+    <button id="gearBtn" title="設定">⚙️ 設定</button>
+    <div id="visitors" title="瀏覽次數">👀 <span id="viewCount">—</span></div>
+  </header>
+
+  <main id="stage" aria-live="polite">
+    <div class="clock" data-burnin>
+      <div class="time" id="time">00:00:00</div>
+      <div class="date" id="date">—</div>
+    </div>
+
+    <div id="animals" aria-hidden="true"></div>
+
+    <div id="tapHint" class="hint">輕點畫面可嘗試全螢幕（建議加入主畫面）</div>
   </main>
 
+  <aside id="panel" hidden>
+    <h3>⚙️ 設定</h3>
+    <div class="row"><label>24 小時制</label><input type="checkbox" id="opt24h"></div>
+    <div class="row"><label>顯示秒數</label><input type="checkbox" id="optSec"></div>
+    <div class="row"><label>啟動時自動全螢幕（需互動）</label><input type="checkbox" id="optAutoFS"></div>
+    <hr/>
+    <div class="row"><label>防烙印位移（像素）</label><input type="number" id="optNudge" min="0" max="20" step="1" value="10"></div>
+    <div class="row"><label>位移週期（分鐘）</label><input type="number" id="optNudgeMin" min="1" max="30" step="1" value="2"></div>
+    <div class="row"><label>小動物特效</label><input type="checkbox" id="optAnimals" checked></div>
+  </aside>
+
   <script>
-    (function(){
-      const elHH = document.getElementById('hh');
-      const elMM = document.getElementById('mm');
-      const elSS = document.getElementById('sec');
-      const elDate = document.getElementById('dateRow');
-      const elTZ = document.getElementById('tz');
-      const btn12h = document.getElementById('toggle-12h');
-      const btnSec = document.getElementById('toggle-sec');
-      const viewBox = document.getElementById('viewBox');
-      const viewCount = document.getElementById('viewCount');
-      const critters = Array.from(document.querySelectorAll('.critter'));
-      const animal = document.getElementById('animal');
-      const viewerCount = document.getElementById('viewerCount');
-      const LS_KEY = 'landscape-clock:v1';
-      const state = Object.assign({ is12h:false, showSec:true }, JSON.parse(localStorage.getItem(LS_KEY) || '{}'));
-      function save(){ localStorage.setItem(LS_KEY, JSON.stringify(state)); }
-      function pad(n){ return String(n).padStart(2,'0'); }
-      function fmtDate(d){ const y=d.getFullYear(); const m=d.getMonth()+1; const da=d.getDate(); const day=d.getDay(); const names=['週日','週一','週二','週三','週四','週五','週六']; return `${y}年${m}月${da}日（${names[day]}）`; }
-      function updateClock(){ const d=new Date(); let h=d.getHours(); if(state.is12h){ h=(h%12)||12; } elHH.textContent=pad(h); elMM.textContent=pad(d.getMinutes()); if(state.showSec){ elSS.textContent=pad(d.getSeconds()); elSS.style.display='inline-block'; } else { elSS.style.display='none'; } elDate.textContent=fmtDate(d); }
-      setInterval(updateClock,1000); updateClock();
-      function syncControls(){ btn12h.textContent = state.is12h ? '12小時制' : '24小時制'; btn12h.setAttribute('aria-pressed', String(state.is12h)); btnSec.textContent = state.showSec ? '顯示秒' : '隱藏秒'; btnSec.setAttribute('aria-pressed', String(state.showSec)); }
-      syncControls();
-      btn12h.addEventListener('click',()=>{state.is12h=!state.is12h;save();syncControls();updateClock();});
-      btnSec.addEventListener('click',()=>{state.showSec=!state.showSec;save();syncControls();updateClock();});
-      try { const tz=Intl.DateTimeFormat().resolvedOptions().timeZone||'本機時區'; elTZ.textContent=`時區：${tz}`; } catch(e){ elTZ.textContent='時區：本機'; }
+    // ========= 工具 =========
+    const $ = (sel, el=document) => el.querySelector(sel);
+    const $$ = (sel, el=document) => Array.from(el.querySelectorAll(sel));
+    const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 
-      // 隨機文字移動效果，每兩分鐘觸發一次
-      const textEls = [elHH, elMM, elSS, elDate, elTZ, btn12h, btnSec, ...critters];
-      function randomShift(){
-        textEls.forEach(el=>{
-          const dir = Math.random() < 0.5 ? -1 : 1;
-          el.style.transform = `translateX(${dir*10}px)`;
-          setTimeout(()=>{el.style.transform = 'translateX(0px)';},1500);
-        });
-      }
-      setInterval(randomShift, 120000);
+    // ========= 儲存設定 =========
+    const store = {
+      get() {
+        try {
+          return JSON.parse(localStorage.getItem('oledClockCfg')||'{}');
+        } catch { return {}; }
+      },
+      set(cfg) { localStorage.setItem('oledClockCfg', JSON.stringify(cfg)); }
+    };
+    const cfg = Object.assign({
+      h24: true,
+      showSec: true,
+      autoFS: false,
+      nudgePx: 10,
+      nudgeMin: 2,
+      animals: true,
+    }, store.get());
 
-      // 簡易瀏覽人數（使用 countapi.xyz 公共服務）。
-      // 注意：若在本機 file:// 打開，會以 'local-demo' 作為 key，佈署到網路上後會自動改用網址。
-      async function initCounter(){
-        const host = location.host || 'local';
-        const path = location.pathname || '/';
-        const ns = 'landscape-clock';
-        const key = encodeURIComponent(host + path) || 'local-demo';
-        const today = new Date().toISOString().slice(0,10);
-        const last = localStorage.getItem('vc_last');
-        const base = `https://api.countapi.xyz`;
-        try{
-          let url = `${base}/get/${ns}/${key}`;
-          if(last !== today){ // 今日首次瀏覽才 +1，避免同一裝置重複計次
-            url = `${base}/hit/${ns}/${key}`;
-            localStorage.setItem('vc_last', today);
-          }
-          const res = await fetch(url);
-          const data = await res.json();
-          if(data && (data.value !== undefined)){
-            viewCount.textContent = data.value.toLocaleString();
-          } else { throw new Error('no value'); }
-        }catch(e){ viewBox.style.display='none'; }
-      }
-      initCounter();
+    // ========= 時鐘 =========
+    const timeEl = $('#time');
+    const dateEl = $('#date');
 
-      // 小動物隨機更換
-      const animals = ['🐱','🐶','🐰','🐧','🐼','🐸','🐢','🦊','🦉'];
-      function changeAnimal(){
-        animal.textContent = animals[Math.floor(Math.random()*animals.length)];
-      }
-      setInterval(changeAnimal, 60000);
-      changeAnimal();
+    function fmt2(n){ return n<10? '0'+n : ''+n; }
+    function tick(){
+      const now = new Date();
+      let h = now.getHours();
+      const m = now.getMinutes();
+      const s = now.getSeconds();
+      if (!cfg.h24) { h = ((h+11)%12)+1; }
+      timeEl.textContent = cfg.showSec
+        ? `${fmt2(h)}:${fmt2(m)}:${fmt2(s)}`
+        : `${fmt2(h)}:${fmt2(m)}`;
+      const weekdays = ['日','一','二','三','四','五','六'];
+      dateEl.textContent = `${now.getFullYear()}-${fmt2(now.getMonth()+1)}-${fmt2(now.getDate())}（${weekdays[now.getDay()]}）`;
+    }
+    setInterval(tick, 250); tick();
 
-      // 瀏覽人數模擬（需後端支援真實計數）
-      let count = Math.floor(Math.random()*100)+1;
-      viewerCount.textContent = `👀 瀏覽人數：${count}`;
+    // ========= 防烙印位移（只左右） =========
+    function randomInt(min, max){ return Math.floor(Math.random()*(max-min+1))+min; }
+    function nudge(){
+      const amp = Math.max(0, Math.min(20, Number(cfg.nudgePx)||0));
+      const dx = amp===0 ? 0 : randomInt(-amp, amp);
+      document.documentElement.style.setProperty('--nudge-x', dx+'px');
+    }
+    // 每 cfg.nudgeMin 分鐘位移一次
+    let nudgeTimer;
+    function startNudger(){
+      clearInterval(nudgeTimer);
+      nudge();
+      const ms = Math.max(1, Number(cfg.nudgeMin)||2) * 60 * 1000;
+      nudgeTimer = setInterval(nudge, ms);
+    }
+    startNudger();
+
+    // ========= 小動物（emoji 橫向游動） =========
+    const animalsWrap = $('#animals');
+    const animalList = ['🐟','🐱','🐦','🦊','🐧','🐢'];
+    function spawnAnimal(){
+      if (!cfg.animals) return;
+      const el = document.createElement('div');
+      el.className = 'ani';
+      el.textContent = animalList[Math.floor(Math.random()*animalList.length)];
+      const y = Math.random()*80 + 10; // 10% ~ 90% 視窗高度
+      const dur = Math.random()*20 + 18; // 18 ~ 38 秒
+      el.style.top = y+'vh';
+      el.style.right = '-10vw';
+      el.style.animation = `swim ${dur}s linear forwards`;
+      animalsWrap.appendChild(el);
+      setTimeout(()=> el.remove(), (dur+0.5)*1000);
+    }
+    // 每 7~14 秒隨機來一隻
+    let animalTimer;
+    function startAnimals(){
+      if (animalTimer) clearInterval(animalTimer);
+      if (!cfg.animals) return;
+      animalTimer = setInterval(()=>{ if (cfg.animals) spawnAnimal(); }, (7000 + Math.random()*7000));
+    }
+    startAnimals();
+
+    // ========= 瀏覽次數 =========
+    (function views(){
+      const key = 'pageViews';
+      const v = Number(localStorage.getItem(key)||0) + 1;
+      localStorage.setItem(key, v);
+      $('#viewCount').textContent = v.toLocaleString();
+      // 若想要全站累計（例如 GitHub Pages），可改用 Count API：
+      // fetch('https://api.countapi.xyz/hit/<自訂命名空間>/<自訂key>')
+      //   .then(r=>r.json()).then(d=> $('#viewCount').textContent = (d.value||v).toLocaleString())
+      //   .catch(()=>{});
     })();
+
+    // ========= 全螢幕與橫向鎖定 =========
+    async function enterFullscreen(){
+      try {
+        if (!document.fullscreenElement) {
+          await document.body.requestFullscreen();
+        }
+        if (screen.orientation && screen.orientation.lock) {
+          try { await screen.orientation.lock('landscape'); } catch {}
+        }
+        $('#tapHint').style.display = 'none';
+        fsBtn.textContent = '⤢ 退出全螢幕';
+      } catch (e) {
+        console.log('Fullscreen failed:', e);
+      }
+    }
+    async function exitFullscreen(){
+      try { if (document.fullscreenElement) await document.exitFullscreen(); } catch {}
+      fsBtn.textContent = '⤢ 全螢幕';
+    }
+
+    const fsBtn = $('#fsBtn');
+    fsBtn.addEventListener('click', ()=> {
+      if (document.fullscreenElement) exitFullscreen(); else enterFullscreen();
+    });
+
+    // 首次互動若有開啟自動全螢幕
+    let firstTapDone = false;
+    async function firstTapHandler(){
+      if (!firstTapDone) {
+        firstTapDone = true;
+        if (cfg.autoFS) await enterFullscreen();
+      }
+    }
+    document.addEventListener('pointerdown', firstTapHandler, { once: true });
+
+    // ========= 自動隱藏 HUD =========
+    const hud = $('#hud');
+    let hideTimer;
+    function scheduleHideHUD(){
+      clearTimeout(hideTimer);
+      hud.classList.remove('hidden');
+      hideTimer = setTimeout(()=> hud.classList.add('hidden'), 5000);
+    }
+    ['pointermove','pointerdown','keydown'].forEach(ev => document.addEventListener(ev, scheduleHideHUD));
+    scheduleHideHUD();
+
+    // ========= 設定面板 =========
+    const panel = $('#panel');
+    const gearBtn = $('#gearBtn');
+    gearBtn.addEventListener('click', ()=> panel.hidden = !panel.hidden);
+
+    const opt24h = $('#opt24h');
+    const optSec = $('#optSec');
+    const optAutoFS = $('#optAutoFS');
+    const optNudge = $('#optNudge');
+    const optNudgeMin = $('#optNudgeMin');
+    const optAnimals = $('#optAnimals');
+
+    // 初始化面板狀態
+    opt24h.checked = cfg.h24;
+    optSec.checked = cfg.showSec;
+    optAutoFS.checked = cfg.autoFS;
+    optNudge.value = cfg.nudgePx;
+    optNudgeMin.value = cfg.nudgeMin;
+    optAnimals.checked = cfg.animals;
+
+    function save(){
+      cfg.h24 = !!opt24h.checked;
+      cfg.showSec = !!optSec.checked;
+      cfg.autoFS = !!optAutoFS.checked;
+      cfg.nudgePx = Math.max(0, Math.min(20, Number(optNudge.value)||0));
+      cfg.nudgeMin = Math.max(1, Math.min(30, Number(optNudgeMin.value)||2));
+      cfg.animals = !!optAnimals.checked;
+      store.set(cfg);
+      startNudger();
+      startAnimals();
+      tick();
+    }
+    panel.addEventListener('change', save);
+
+    // ========= 安裝提示（PWA Partial） =========
+    // 提供簡單的安裝到主畫面提示（Android 可用 Chrome 的「加入主畫面」功能）
+    let deferredPrompt = null;
+    window.addEventListener('beforeinstallprompt', (e)=>{
+      e.preventDefault(); deferredPrompt = e; // 某些平台可能不支援
+      $('#tapHint').textContent = '可從瀏覽器選單「加入主畫面」獲得全螢幕體驗';
+    });
+
+    // ========= 裝置方向提示 =========
+    function orientationHint(){
+      if (window.matchMedia('(orientation: portrait)').matches) {
+        $('#tapHint').textContent = '建議橫向使用，輕點可嘗試全螢幕';
+      } else {
+        $('#tapHint').textContent = '輕點畫面可嘗試全螢幕（建議加入主畫面）';
+      }
+    }
+    window.addEventListener('orientationchange', orientationHint);
+    orientationHint();
   </script>
 </body>
 </html>

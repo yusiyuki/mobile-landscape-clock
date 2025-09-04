@@ -1,0 +1,20 @@
+name: Deploy second branch to /second/
+
+on:
+  push:
+    branches:
+      - second   # 當 second 分支有 push 就觸發
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout second branch
+        uses: actions/checkout@v3
+
+      - name: Deploy to gh-pages
+        uses: peaceiris/actions-gh-pages@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: .
+          destination_dir: second   # 把檔案發佈到 /second/ 子路徑
